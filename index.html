@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expression Parser</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 500px;
+            text-align: center;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 20px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-align: left;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>Expression Parser</h2>
+        <input type="text" id="expression" placeholder="Enter expression (e.g., 3 + 5 * ( 2 - 7 ))">
+        <button onclick="processExpression()">Parse Expression</button>
+
+        <div id="result" class="output"></div>
+    </div>
+
+    <script>
+        class Node {
+            constructor(value) {
+                this.value = value;
+                this.children = [];
+            }
+
+            addChild(child) {
+                this.children.push(child);
+            }
+
+            toString(level = 0) {
+                let result = "  ".repeat(level) + `${this.value}\n`;
+                this.children.forEach(child => {
+                    result += child.toString(level + 1);
+                });
+                return result;
+            }
+        }
+
+        function parseExpr(tokens) {
+            const node = new Node("expr");
+            let termNode = parseTerm(tokens);
+            node.addChild(termNode);
+
+            while (tokens.length > 0 && ['+', '-'].includes(tokens[0])) {
+                const op = tokens.shift();
+                const opNode = new Node(op);
+                node.addChild(opNode);
+                termNode = parseTerm(tokens);
+                node.addChild(termNode);
+            }
+
+            return node;
+        }
+
+        function parseTerm(tokens) {
+            const node = new Node("term");
+            let factorNode = parseFactor(tokens);
+            node.addChild(factorNode);
+
+            while (tokens.length > 0 && ['*', '/'].includes(tokens[0])) {
+                const op = tokens.shift();
+                const opNode = new Node(op);
+                node.addChild(opNode);
+                factorNode = parseFactor(tokens);
+                node.addChild(factorNode);
+            }
+
+            return node;
+        }
+
+        function parseFactor(tokens) {
+            const node = new Node("factor");
+            if (!tokens.length) throw new SyntaxError("Unexpected end of input");
+
+            if (/^\d+$/.test(tokens[0])) {
+                const intNode = new Node(tokens.shift());
+                node.addChild(intNode);
+            } else if (tokens[0] === '(') {
+                tokens.shift(); // Remove '('
+                const exprNode = parseExpr(tokens);
+                node.addChild(exprNode);
+                if (tokens[0] === ')') {
+                    tokens.shift(); // Remove ')'
+                } else {
+                    throw new SyntaxError("Expected ')' but not found");
+                }
+            } else {
+                throw new SyntaxError(`Invalid token: ${tokens[0]}`);
+            }
+
+            return node;
+        }
+
+        function buildAST(parseTree) {
+            if (!parseTree.children.length) {
+                return new Node(parseTree.value);
+            }
+
+            if (['expr', 'term', 'factor'].includes(parseTree.value)) {
+                if (parseTree.children.length === 1) {
+                    return buildAST(parseTree.children[0]);
+                }
+
+                const astNode = new Node(parseTree.children[1].value); // Operator
+                astNode.addChild(buildAST(parseTree.children[0]));
+                astNode.addChild(buildAST(parseTree.children[2]));
+                return astNode;
+            }
+
+            const astNode = new Node(parseTree.value);
+            parseTree.children.forEach(child => {
+                astNode.addChild(buildAST(child));
+            });
+            return astNode;
+        }
+
+        function tokenize(inputString) {
+            const tokens = [];
+            let currentNum = "";
+
+            for (let i = 0; i < inputString.length; i++) {
+                const char = inputString[i];
+                if (/^\d$/.test(char)) {
+                    currentNum += char;
+                } else {
+                    if (currentNum) {
+                        tokens.push(currentNum);
+                        currentNum = "";
+                    }
+                    if (['+', '-', '*', '/', '(', ')'].includes(char)) {
+                        tokens.push(char);
+                    } else if (char.trim() === '') {
+                        continue;
+                    } else {
+                        throw new Error(`Unexpected character: ${char}`);
+                    }
+                }
+            }
+
+            if (currentNum) {
+                tokens.push(currentNum);
+            }
+
+            return tokens;
+        }
+
+        function processExpression() {
+            const inputString = document.getElementById('expression').value.trim();
+            const resultDiv = document.getElementById('result');
+
+            if (!inputString) {
+                resultDiv.innerHTML = "<span class='error'>Please enter a valid expression.</span>";
+                return;
+            }
+
+            try {
+                const tokens = tokenize(inputString);
+                const parseTree = parseExpr(tokens);
+                const ast = buildAST(parseTree);
+
+                // Display both Parse Tree and Abstract Syntax Tree
+                resultDiv.innerHTML = `
+                    <strong>Parse Tree:</strong><pre>${parseTree.toString()}</pre>
+                    <strong>Abstract Syntax Tree (AST):</strong><pre>${ast.toString()}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class='error'>Error: ${error.message}</span>`;
+            }
+        }
+    </script>
+
+</body>
+
+</html>
